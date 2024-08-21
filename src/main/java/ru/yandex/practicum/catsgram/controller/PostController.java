@@ -1,67 +1,61 @@
 package ru.yandex.practicum.catsgram.controller;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-import ru.yandex.practicum.catsgram.exception.ConditionsNotMetException;
+import ru.yandex.practicum.catsgram.enums.SortOrder;
 import ru.yandex.practicum.catsgram.exception.NotFoundException;
+import ru.yandex.practicum.catsgram.exception.ParameterNotValidException;
 import ru.yandex.practicum.catsgram.model.Post;
+import ru.yandex.practicum.catsgram.service.PostService;
 
-import java.time.Instant;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/posts")
 public class PostController {
-    private final Map<Long, Post> posts = new HashMap<>();
+    private final PostService postService;
 
-    // вспомогательный метод для генерации идентификатора нового поста
-    private long getNextId() {
-        long currentMaxId = posts.keySet()
-                .stream()
-                .mapToLong(id -> id)
-                .max()
-                .orElse(0);
-        return ++currentMaxId;
+    public PostController(PostService postService) {
+        this.postService = postService;
+    }
+
+    @GetMapping("/{postId}")
+    public Post findPostById(@PathVariable("postId") Long postId) {
+        return postService.findPostById(postId).orElseThrow(() -> new NotFoundException("Пост № " + postId + " не найден"));
     }
 
     @GetMapping
-    public Collection<Post> findAll() {
-        return posts.values();
+    public Collection<Post> findAll(@RequestParam(name = "sort", defaultValue = "desc") String sort,
+                                    @RequestParam(name = "from", defaultValue = "0") Integer page,
+                                    @RequestParam(name = "size", defaultValue = "10") Integer size
+    ) {
+
+        SortOrder adjustedSort = SortOrder.from(sort);
+
+        if (sort.isBlank()) {
+            throw new ParameterNotValidException("sort", "Неверно указан тип сортировки " + sort +
+                    ". Возможные варианты: \"ascending\", \"asc\", \"descending\", \"desc\"");
+        }
+
+        if (size <= 0) {
+            throw new ParameterNotValidException("size", "Размер должен быть больше нуля");
+        }
+
+        if (page < 0) {
+            throw new ParameterNotValidException("page", "Начало выборки должно быть положительным числом");
+        }
+
+        return postService.findAll(adjustedSort, page, size);
     }
 
+    @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
     public Post create(@RequestBody Post post) {
-        // проверяем выполнение необходимых условий
-        if (post.getDescription() == null || post.getDescription().isBlank()) {
-            throw new ConditionsNotMetException("Описание не может быть пустым");
-        }
-        // формируем дополнительные данные
-        post.setId(getNextId());
-        post.setPostDate(Instant.now());
-        // сохраняем новую публикацию в памяти приложения
-        posts.put(post.getId(), post);
-        return post;
+        return postService.create(post);
     }
 
     @PutMapping
     public Post update(@RequestBody Post newPost) {
-        // проверяем необходимые условия
-        if (newPost.getId() == null) {
-            throw new ConditionsNotMetException("Id должен быть указан");
-        }
-
-        if (newPost.getDescription() == null || newPost.getDescription().isBlank()) {
-            throw new ConditionsNotMetException("Описание не может быть пустым");
-        }
-
-        if (posts.containsKey(newPost.getId())) {
-            Post oldPost = posts.get(newPost.getId());
-            // если публикация найдена и все условия соблюдены, обновляем её содержимое
-            oldPost.setDescription(newPost.getDescription());
-            return oldPost;
-        }
-
-        throw new NotFoundException("Пост с id = " + newPost.getId() + " не найден");
+        return postService.update(newPost);
     }
 }
