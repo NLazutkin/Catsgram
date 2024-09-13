@@ -6,7 +6,6 @@ import java.time.Instant;
 
 @Data
 @EqualsAndHashCode(of = {"email"})
-@Builder
 public class User {
     Long id;
     String username;
